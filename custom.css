@@ -1261,3 +1261,6 @@ h2 {
     transition-duration: .01ms !important;
   }
 }
+
+/* 支援目標は体験談ではないため、引用符の装飾を表示しない。 */
+.voice-grid p::before { content: none; }

@@ -213,12 +213,14 @@ if (navToggle && navOverlay) {
   });
 }
 
-document.querySelector('.contact-form')?.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const button = event.currentTarget.querySelector('button');
-  if (!button) return;
-  button.textContent = '仮送信を確認しました';
-  window.setTimeout(() => {
-    button.textContent = '送信内容を確認';
-  }, 2200);
-});
+// FormSubmit の受信確認後に、専用URLをフォームの action に設定します。
+// 接続前は送信を止め、未送信の内容に成功メッセージを表示しません。
+const contactForm = document.querySelector('.contact-form');
+if (contactForm) {
+  contactForm.addEventListener('submit', (event) => {
+    if (contactForm.dataset.connection !== 'ready') {
+      event.preventDefault();
+      document.querySelector('#contact-status').textContent = 'お問い合わせフォームは接続設定中です。現在は送信できません。';
+    }
+  });
+}
