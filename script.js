@@ -213,14 +213,60 @@ if (navToggle && navOverlay) {
   });
 }
 
-// FormSubmit の受信確認後に、専用URLをフォームの action に設定します。
-// 接続前は送信を止め、未送信の内容に成功メッセージを表示しません。
+// HP内のフォーム → 同一サイトのAPI → 非公開の管理シート
 const contactForm = document.querySelector('.contact-form');
 if (contactForm) {
-  contactForm.addEventListener('submit', (event) => {
-    if (contactForm.dataset.connection !== 'ready') {
-      event.preventDefault();
-      document.querySelector('#contact-status').textContent = 'お問い合わせフォームは接続設定中です。現在は送信できません。';
+  const status = document.querySelector('#contact-status');
+  const button = contactForm.querySelector('button[type="submit"]');
+  let requestId;
+  let lastPayload;
+  let busy = false;
+  let ready = false;
+  if (location.protocol !== 'file:') {
+    fetch('/api/contact', { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(result => {
+        if (result?.ready) {
+          ready = true;
+          button.disabled = false;
+          status.textContent = '';
+        }
+      }).catch(() => {});
+  }
+  contactForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!ready || busy || !contactForm.reportValidity()) return;
+    const data = Object.fromEntries(new FormData(contactForm));
+    const payload = JSON.stringify(data);
+    // 通信失敗後の再送では同じIDを使用し、二重受付を防ぐ。
+    if (payload !== lastPayload || !requestId) requestId = crypto.randomUUID();
+    lastPayload = payload;
+    busy = true;
+    button.disabled = true;
+    button.textContent = '送信中…';
+    status.textContent = '受付を確認しています。';
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, requestId }),
+        signal: AbortSignal.timeout(30000),
+      });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true || result.requestId !== requestId) {
+        throw new Error(result.message || '受付結果を確認できませんでした。同じ内容でもう一度送信してください。');
+      }
+      status.textContent = 'お問い合わせを受け付けました。内容を確認し、ご入力のメールアドレスへご連絡いたします。';
+      contactForm.reset();
+      requestId = undefined;
+      lastPayload = undefined;
+    } catch (error) {
+      status.textContent = error.name === 'TimeoutError' || error instanceof TypeError ?
+        '通信結果を確認できませんでした。入力内容を残しています。同じ内容でもう一度送信してください。' : error.message;
+    } finally {
+      busy = false;
+      button.disabled = false;
+      button.textContent = '送信する';
     }
   });
 }
